@@ -1,12 +1,9 @@
-# THIS PROJECT IS DEAD
-I have given up on 9gag, it gets worse and worse every day, it's just not worth my time to keep working on this project. This extension will stay up on the stores and keep working until it breaks. And when it breaks I will not fix it. 
-
 # 9gag-post-filter
 
 It seems like the devs keep breaking their own app, letting bots and spammers run around unchecked, and refuse to give the community what it wants. I want to try to fix that.
 
 ##   what is it?
-It's a chrome\firefox extension (that also works on android), that lets you filter posts on 9gag in a way that the devs refuse to implement. 
+It's a chrome\firefox extension (that also works on android), that lets you filter posts on 9gag in a way that the devs refuse to implement.
 
 ## Features
 
