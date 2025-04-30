@@ -10,11 +10,7 @@
   "content_scripts": [
     {
       "css": ["assets/css/content.css"],
-      "js": [
-        "assets/js/content.js",
-        "assets/js/cash.js",
-        "assets/js/script.js"
-      ],
+      "js": ["assets/js/functions.js", "assets/js/cash.js", "assets/js/content.js"],
       "matches": ["https://9gag.com/*"],
       "content_security_policy": {
         "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
