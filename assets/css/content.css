@@ -30,6 +30,12 @@ body.theme-dark .content-wrap {
     background-color: #000000 !important;
 }
 
+body.theme-dark .user-link {
+    color: #ffffff !important;
+    font-weight: bold;
+    font-size: 1rem;
+}
+
 /* change the sound toggle position to not interfere with the controls*/
 .sound-toggle {
     top: 2px !important;
@@ -50,4 +56,9 @@ body.theme-dark .content-wrap {
     text-align: center;
     padding: 0 3px;
     min-width: 2ch;
+}
+
+.spammer-label {
+    color: red;
+    font-weight: bold;
 }

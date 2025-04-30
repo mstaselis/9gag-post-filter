@@ -1,10 +1,6 @@
 var settings;
 var $tags = [];
-const clickEvent = new MouseEvent("click", {
-  view: window,
-  bubbles: true,
-  cancelable: false,
-});
+
 var k = 0; //numerical id for id-less elements, mostly on mobile browser
 chrome.storage.local.get(
   [
@@ -29,46 +25,7 @@ chrome.storage.local.get(
     }
   },
 );
-const getNameFromMenu = async (art_id) => {
-  if (document.querySelector("#" + art_id + " .uikit-popup-menu") !== null) {
-    //desktop
-    let el = document.querySelector("#" + art_id + " .uikit-popup-menu");
-    await el.querySelector(".button").click();
-    let name = await [...(await el.querySelectorAll(".menu a"))]
-      .at(-1)
-      .text.split("@")[1];
-    el.querySelector(".button").click();
-    return name;
-  } else {
-    let el = document.querySelector("#" + art_id + " .post-top a.icon");
-    let post_id = document
-      .querySelector("#" + art_id + ' a[href*="/gag/"]')
-      ?.href.split("/")
-      .at(-1);
-    try {
-      await el.click();
-    } catch (e) {}
-    let name = await [
-      ...document
-        .querySelector(
-          ".overlay.overlay-bottom-sheet.bottom-sheet .modal__content .menu-list a[href*='" +
-            post_id +
-            "']",
-        )
-        .parentElement.parentElement.querySelectorAll("a"),
-    ]
-      .at(-1)
-      .text.split("@")[1];
-    await [
-      ...document.querySelectorAll(
-        ".overlay.overlay-bottom-sheet.bottom-sheet",
-      ),
-    ].forEach(async (element) => {
-      await element.click();
-    });
-    return name;
-  }
-};
+
 const myTimeout = setTimeout(function () {
   setInterval(async function () {
     ////console.log(settings);
@@ -81,7 +38,6 @@ const myTimeout = setTimeout(function () {
         $(this).attr("id", "custom-id-" + k);
         k++;
       }
-
       //console.log($(this), $(this).attr("id")+" is unfiltered")
 
       let art_id = $(this).attr("id");
@@ -94,10 +50,10 @@ const myTimeout = setTimeout(function () {
           : await getNameFromMenu(art_id);
       if (document.querySelector("#" + art_id + " .ui-post-creator") === null) {
         $("#" + art_id + " .post-header__left").append(
-          `<span>| <a style="color:white;font-weight:bold;font-size:1rem;" href="https://9gag.com/u/${name}">@${name}</a></span>`,
+          `<span>| <a class="user-link" href="https://9gag.com/u/${name}">@${name}</a></span>`,
         );
         $("#" + art_id + " .post-meta.mobile").append(
-          `<br/><span> <a style="color:white;font-weight:bold;font-size:1rem;" href="https://9gag.com/u/${name}">@${name}</a></span>`,
+          `<br/><span> <a class="user-link" href="https://9gag.com/u/${name}">@${name}</a></span>`,
         );
       }
       //console.log(article, 'name after func',name);
@@ -207,8 +163,12 @@ const myTimeout = setTimeout(function () {
         if (document.querySelector("#" + art_id + " .ui-post-creator") !== null)
           $("#" + art_id + " .ui-post-creator").append("| " + diff + " days");
         else {
-          $("#" + art_id + " .post-header__left").append("| " + diff + " days");
-          $("#" + art_id + " .post-meta.mobile").append("| " + diff + " days");
+          $("#" + art_id + " .post-header__left").append(
+            "<span>| " + diff + " days</span>",
+          );
+          $("#" + art_id + " .post-meta.mobile").append(
+            "<span>| " + diff + " days</span>",
+          );
         }
 
         // const json = JSON.parse(jsonString);
@@ -245,14 +205,14 @@ const myTimeout = setTimeout(function () {
                 null
               )
                 $("#" + art_id + " .ui-post-creator").append(
-                  `<span style="color:red;font-weight:bold;">| SPAMMER</span>`,
+                  `<span class="spammer-label">| SPAMMER</span>`,
                 );
               else {
                 $("#" + art_id + " .post-header__left").append(
-                  `<span style="color:red;font-weight:bold;">| SPAMMER</span>`,
+                  `<span class="spammer-label">| SPAMMER</span>`,
                 );
                 $("#" + art_id + " .post-meta.mobile").append(
-                  `<span style="color:red;font-weight:bold;">| SPAMMER</span>`,
+                  `<span class="spammer-label">| SPAMMER</span>`,
                 );
               }
             }
