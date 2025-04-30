@@ -6,11 +6,9 @@ chrome.storage.local.get(
   [
     "show_days",
     "min_days",
-    "anon",
     "verified",
     "promoted",
     "tags",
-    "title",
     "spammers",
     "spammers_hours",
     "cheers",
@@ -81,30 +79,20 @@ const myTimeout = setTimeout(function () {
       //console.log(article,"global tags", $tags);
 
       if (
-        (name == "9GAGGER" && settings.anon) || //hide anons
         (document.querySelectorAll("#" + art_id + " .ui-post-creator__badge")
           .length > 0 &&
           settings.verified) || // hide verified
         ($("#" + art_id + " .ui-post-creator__author").hasClass("promoted") &&
           settings.promoted) // hide promoted
       ) {
-        //console.log("anon/promoted need to hide ",article);
         $(this).hide();
         $(this).addClass("filtered");
         return;
       }
 
       for (let i = 0; i < $tags.length; i++) {
-        //hide tags
         let tag = $tags[i];
-        //console.log(article,"tag ", tag);
-        //console.log(article,"in post> ", post_tags.includes(tag));
-        if (
-          (settings.title &&
-            title.toLowerCase().indexOf(tag.trim().toLowerCase()) > -1 &&
-            tag.trim().toLowerCase() !== "") || //search by title
-          post_tags.includes(tag) //search by post tags
-        ) {
+        if (post_tags.includes(tag)) {
           //console.log(article,'filtered by tags');
           $("#" + art_id).hide();
           $(this).addClass("filtered");
@@ -118,7 +106,7 @@ const myTimeout = setTimeout(function () {
       }
 
       //keep days stuff for last, no unnecessary http requests
-      if ((settings.show_days || settings.min_days > 0) && name != "9GAGGER") {
+      if (settings.show_days || settings.min_days > 0) {
         ////console.log("GETting...");
         const response = await fetch(
           "https://9gag.com/v1/user-posts/username/" + name + "/type/posts",
