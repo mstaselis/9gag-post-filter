@@ -2,7 +2,7 @@ var settings;
 
 var k = 0; //numerical id for id-less elements, mostly on mobile browser
 chrome.storage.local.get(settingsKeys, function (data) {
-  settings = Object.assign({}, data);  
+  settings = Object.assign({}, data);
 });
 
 chrome.storage.onChanged.addListener((changes, namespace) => {
@@ -29,7 +29,7 @@ if (containerElement && !window.location.pathname.includes("/u/")) {
     if (firstPosts) {
       filter(firstPosts);
     }
-  }, 1000);
+  }, 1500);
 }
 
 function initialize() {
@@ -96,8 +96,9 @@ function filter(addedNode) {
         diff = parseInt(diff);
 
         if (settings.min_days > diff) {
-          post.hide();
+          post.addClass("hidden");
           post.addClass("filtered");
+          post.closest(".stream-container").css("min-height", "auto");
           return;
         }
 
@@ -124,7 +125,8 @@ function filter(addedNode) {
 
           if (diffAve < diffset) {
             if (settings.hide_spammers) {
-              post.hide();
+              post.addClass("hidden");
+              post.closest(".stream-container").css("min-height", "auto");
             } else {
               if (post.find(".ui-post-creator").length) post.find(".ui-post-creator").append(`<span class="spammer-label">| SPAMMER</span>`);
               else {
