@@ -1,10 +1,14 @@
-.container {
-    min-width: 350px; /* Prevent excessive stretching */
-}
-
-.grid-2x2 {
+.grid {
     display: grid;
-    grid-template-columns: 1fr 1fr; /* Two columns */
-    grid-template-rows: 1fr 1fr; /* Two rows */
-    gap: 1rem; /* Optional spacing */
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    contain: layout paint;
+}
+html,
+body {
+    width: 450px;
+    height: 400px;
+    overflow: hidden;
 }
