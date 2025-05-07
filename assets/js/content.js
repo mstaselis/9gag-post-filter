@@ -1,8 +1,14 @@
 var settings;
 
 var k = 0; //numerical id for id-less elements, mostly on mobile browser
-chrome.storage.local.get(["show_days", "min_days", "spammers", "spammers_hours", "cheers", "more_downvotes", "hide_spammers", "always_display_upvotes"], (data) => {
-  settings = data;
+chrome.storage.local.get(settingsKeys, function (data) {
+  settings = Object.assign({}, data);  
+});
+
+chrome.storage.onChanged.addListener((changes, namespace) => {
+  for (let [key, { oldValue, newValue }] of Object.entries(changes)) {
+    settings[key] = newValue;
+  }
 });
 
 const containerElement = document.getElementById("container");
