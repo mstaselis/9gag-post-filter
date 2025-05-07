@@ -47,7 +47,8 @@ function filter(addedNode) {
 
     //add name
     let art_id = post.attr("id");
-    let name = post.find(".ui-post-creator__author").length ? post.find(".ui-post-creator__author").first().text() : await getNameFromMenu(art_id);
+
+    const name = await getNameFromMenu(art_id);
     if (!post.find(".ui-post-creator__author").length) {
       post.find(".post-header__left").first().append(`<span>| <a class="user-link" href="https://9gag.com/u/${name}">@${name}</a></span>`);
       post.find(".post-meta.mobile").first().append(`<span>| <a class="user-link" href="https://9gag.com/u/${name}">@${name}</a></span>`);
@@ -93,10 +94,13 @@ function filter(addedNode) {
           post.addClass("filtered");
           return;
         }
-        if (post.find(".ui-post-creator").length) post.find(".ui-post-creator").append("| " + diff + " days");
-        else {
-          post.find(".post-header__left").append("<span>| " + diff + " days</span>");
-          post.find(".post-meta.mobile").append("<span>| " + diff + " days</span>");
+
+        const diffSpan = `<span>| ${diff} days </span>`;
+        if (post.find(".ui-post-creator").length) {
+          post.find(".ui-post-creator").append(diffSpan);
+        } else {
+          post.find(".post-header__left").append(diffSpan);
+          post.find(".post-meta.mobile").append(diffSpan);
         }
 
         if (settings.spammers && json.data.posts.length >= 10) {

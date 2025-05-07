@@ -1,42 +1,35 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-	<head>
-		<link rel="stylesheet" href="assets/css/index.css">
-	</head>
-	<body>
-	 <div id="popup-wrapper">
-		<div id="popup-header">
-			<h1>9GAG Posts Filter</h1>
-		</div>
-		<div id="popup-containers">
-			<div class="popup-form">
-				<label for="days">Display days next to username</label>
-				<input type="checkbox" name="days" id="days_checkbox" >
-				</br>
-				<label for="min_days">Minimum account age</label>
-				<input type="number" name="min_days" id="days_input" placeholder="example: 300">
-				</br>
-				<label for="spammers">Mark spammers</label>
-				<input type="checkbox" name="spammers" id="spammers_checkbox">
-				<input type="number" name="spammers_hours" id="spammers_input" placeholder="average hours between posts">
-				</br>
-				<label for="cheers">Hide cheers</label>
-				<input type="checkbox" name="cheers" id="cheers_checkbox">
-				</br>
-				<label for="more_downvotes">Hide posts with more downvotes than upvotes</label>
-				<input type="checkbox" name="more_downvotes" id="more_downvotes_checkbox">
-				</br>
-				<label for="hide_spammers">Hide spammers</label>
-				<input type="checkbox" name="hide_spammers" id="hide_spammers_checkbox">
-				</br>
-				<label for="always_display_upvotes">Always display upvotes</label>
-				<input type="checkbox" name="always_display_upvotes" id="always_display_upvotes_checkbox">
-			</div>
-		</br>
-			<a href="https://github.com/AmitBokoDev/9gag-post-filter" id="sauce">view sauce code</a>
-		</div>
-	 </div>
-	 <script src="assets/js/cash.js"></script>
-	 <script src="assets/js/index.js"></script>
-	</body>
+    <head>
+        <link rel="stylesheet" href="assets/css/pico.jade.css" />
+        <link rel="stylesheet" href="assets/css/index.css" />
+    </head>
+    <body>
+        <main class="container">
+            <div class="grid-2x2">
+                <div class="card">Display days next to username</div>
+                <div class="card"><input type="checkbox" name="days" id="days_checkbox" role="switch" /></div>
+
+                <div class="card">Minimum account age</div>
+                <div class="card"><input type="number" name="min_days" id="days_input" placeholder="example: 300" /></div>
+
+                <div class="card">Mark spammers</div>
+                <div class="card"><input type="checkbox" name="spammers" id="spammers_checkbox" role="switch" /></div>
+
+                <div class="card">Hide cheers</div>
+                <div class="card"><input type="checkbox" name="cheers" id="cheers_checkbox" role="switch" /></div>
+
+                <div class="card">Hide posts with more downvotes than upvotes</div>
+                <div class="card"><input type="checkbox" name="more_downvotes" id="more_downvotes_checkbox" role="switch" /></div>
+
+                <div class="card">Hide spammers</div>
+                <div class="card"><input type="checkbox" name="hide_spammers" id="hide_spammers_checkbox" role="switch" /></div>
+
+                <div class="card">Always display upvotes</div>
+                <div class="card"><input type="checkbox" name="always_display_upvotes" id="always_display_upvotes_checkbox" role="switch" /></div>
+            </div>
+        </main>
+        <script src="assets/js/cash.js"></script>
+        <script src="assets/js/index.js"></script>
+    </body>
 </html>

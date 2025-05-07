@@ -1,71 +1,37 @@
-body {
-    width: 250px;
+.container {
+    width: 80%; /* Adjust width */
+    min-width: 450px; /* Prevent excessive stretching */
 }
 
-#popup-wrapper {
-    padding: 5px;
+.grid-2x2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* Two columns */
+    grid-template-rows: 1fr 1fr; /* Two rows */
+    gap: 1rem; /* Optional spacing */
 }
 
-#popup-header h1 {
-    font-size: 12px;
-    margin: 0;
-    margin-bottom: 10px;
+.sound-toggle {
+    top: 2px !important;
+    right: 5px !important;
+    left: auto !important;
 }
 
-.button {
-    font-family: Roboto, system-ui, sans-serif;
-    align-items: center;
-    border: 1px solid rgb( 218, 220, 224 );
-    border-radius: 4px;
-    box-sizing: border-box;
-    color: rgb( 26, 115, 232 );
-    cursor: pointer;
-    display: inline-flex;
-    flex-shrink: 0;
-    font-weight: 500;
-    height: 32px;
-    justify-content: center;
-    min-width: 5.14em;
-    outline-width: 0;
-    padding: 8px 16px;
-    position: relative;
-    user-select: none;
-    background: white;
-    margin: 10px 0 5px 10px;
+.post-meta.mobile {
+    line-height: 50%;
+    margin-bottom: 0.5rem;
 }
 
-.popup-buttons {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
+.downvote {
+    font-weight: bold;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--palette-text-normal);
+    text-align: center;
+    padding: 0 3px;
+    min-width: 2ch;
 }
 
-.button:hover {
-    background: rgba( 66, 133, 244, .04 );
-    border-color: 210, 227, 252;
-}
-
-.button.primary {
-    background: rgb( 26, 115, 232 );
-    color: #fff;
-    border-color: rgb( 26, 115, 232 );
-}
-
-.button.primary:hover {
-    background: rgba( 26, 115, 232, 0.9 );
-    box-shadow: 0 1px 2px 0 rgba( 66, 133, 244, .3),
-    0 1px 3px 1px rgba( 66, 133, 244, .15);
-}
-
-textarea {
-    border: 2px solid rgba( 26, 115, 232, 0.4 );
-    padding: 8px;
-    border-radius: 4px;
-    display: block;
-    width: 224px;
-    margin-top: 5px;
-}
-
-.popup-buttons p {
-    margin: 10px 0 5px 10px;
+.spammer-label {
+    color: red;
+    font-weight: bold;
 }
