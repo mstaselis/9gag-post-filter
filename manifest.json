@@ -9,7 +9,6 @@
   },
   "content_scripts": [
     {
-      "css": ["assets/css/content.css"],
       "js": ["assets/js/functions.js", "assets/js/cash.js", "assets/js/content.js"],
       "matches": ["https://9gag.com/*"],
       "content_security_policy": {
