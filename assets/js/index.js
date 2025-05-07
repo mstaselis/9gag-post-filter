@@ -7,7 +7,7 @@ var more_downvotes_checkbox = $("#more_downvotes_checkbox");
 var hide_spammers_checkbox = $("#hide_spammers_checkbox");
 var always_display_upvotes_checkbox = $("#always_display_upvotes_checkbox");
 
-chrome.storage.local.get(["show_days", "min_days", "spammers", "spammers_hours", "cheers", "more_downvotes", "hide_spammers", "always_display_upvotes"], (data) => {
+chrome.storage.local.get(settingsKeys, (data) => {
   show_days.prop("checked", data.show_days);
   days_input.val(data.min_days);
   spammers_checkbox.prop("checked", data.spammers);

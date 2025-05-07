@@ -1,0 +1,25 @@
+.sound-toggle {
+    top: 2px !important;
+    right: 5px !important;
+    left: auto !important;
+}
+
+.post-meta.mobile {
+    line-height: 50%;
+    margin-bottom: 0.5rem;
+}
+
+.downvote {
+    font-weight: bold;
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--palette-text-normal);
+    text-align: center;
+    padding: 0 3px;
+    min-width: 2ch;
+}
+
+.spammer-label {
+    color: red;
+    font-weight: bold;
+}
