@@ -58,6 +58,12 @@ async function filter(addedNode) {
       var post = $(e);
       post.addClass("filtering");
 
+      if (settings.show_controls) {
+        if (post.find("video").length) {          
+          post.find("video").first().attr("controls", "controls");
+        }
+      }
+
       //add name
       let art_id = post.attr("id");
 
