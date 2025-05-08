@@ -11,6 +11,19 @@ function createAddObserver(targetElement, callback, options = { childList: true 
   return observer;
 }
 
+function isValidFilterUrl(...urlFragments) {
+  let result = true;
+
+  if (urlFragments) {
+    for (let arg of urlFragments) {
+      console.log(arg);
+      result = result && !window.location.pathname.includes(arg);
+    }
+    return result;
+  }
+  return result;
+}
+
 const getNameFromMenu = async (art_id) => {
   if (document.querySelector("#" + art_id + " .uikit-popup-menu") !== null) {
     //desktop
