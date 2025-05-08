@@ -31,3 +31,7 @@
     border-top: 1px !important;
     padding: 0px 0 0 !important;
 }
+
+.stream-container.filtered {
+    min-height: auto !important;
+}
