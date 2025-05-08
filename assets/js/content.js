@@ -12,7 +12,7 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
 });
 
 const containerElement = document.getElementById("container");
-if (containerElement && isValidFilterUrl(["/u/", "/gag/"])) {
+if (containerElement && isValidFilterUrl("/u/", "/gag/")) {
   createAddObserver(
     containerElement,
     (addedNode) => {
@@ -40,7 +40,6 @@ function initialize() {
   if (listView) {
     createAddObserver(listView, (addedNode) => {
       if (addedNode.className && addedNode.className.includes("stream-container")) {
-        //stream container added
         filter(addedNode);
       }
     });
