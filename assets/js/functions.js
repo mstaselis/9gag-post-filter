@@ -16,10 +16,8 @@ function isValidFilterUrl(...urlFragments) {
 
   if (urlFragments) {
     for (let arg of urlFragments) {
-      console.log(arg);
       result = result && !window.location.pathname.includes(arg);
     }
-    return result;
   }
   return result;
 }
