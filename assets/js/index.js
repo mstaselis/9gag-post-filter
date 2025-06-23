@@ -7,6 +7,7 @@ var more_downvotes_checkbox = $("#more_downvotes_checkbox");
 var hide_spammers_checkbox = $("#hide_spammers_checkbox");
 var always_display_upvotes_checkbox = $("#always_display_upvotes_checkbox");
 var show_controls_checkbox = $("#show_controls_checkbox");
+var hide_meme_checkbox = $("#hide_meme_checkbox");
 
 chrome.storage.local.get(settingsKeys, (data) => {
   show_days.prop("checked", data.show_days);
@@ -18,6 +19,7 @@ chrome.storage.local.get(settingsKeys, (data) => {
   hide_spammers_checkbox.prop("checked", data.hide_spammers);
   always_display_upvotes_checkbox.prop("checked", data.always_display_upvotes);
   show_controls_checkbox.prop("checked", data.show_controls);
+  hide_meme_checkbox.prop("checked", data.hide_meme);
 });
 
 show_days.on("change", async function () {
@@ -68,6 +70,12 @@ always_display_upvotes_checkbox.on("change", async function () {
 
 show_controls_checkbox.on("change", async function () {
   chrome.storage.local.set({ show_controls: show_controls_checkbox.prop("checked") }).then(() => {
+    // alert("Value is set to " + $show_days.prop("checked"));
+  });
+});
+
+hide_meme_checkbox.on("change", async function () {
+  chrome.storage.local.set({ hide_meme: hide_meme_checkbox.prop("checked") }).then(() => {
     // alert("Value is set to " + $show_days.prop("checked"));
   });
 });

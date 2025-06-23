@@ -59,7 +59,7 @@ async function filter(addedNode) {
       post.addClass("filtering");
 
       if (settings.show_controls) {
-        if (post.find("video").length) {          
+        if (post.find("video").length) {
           post.find("video").first().attr("controls", "controls");
         }
       }
@@ -76,6 +76,11 @@ async function filter(addedNode) {
       //cheers
       if (settings.cheers) {
         if (post.find(".post-award-users").length) post.find(".post-award-users").hide();
+      }
+
+      //hide meme button
+      if (settings.hide_meme) {
+        post.find(".create-meme-btn").hide();
       }
 
       //days and other stuff
