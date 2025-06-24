@@ -1,6 +1,13 @@
 var settings;
 
-var k = 0; //numerical id for id-less elements, mostly on mobile browser
+window.addEventListener("popstate", function (event) {
+  //on back button press, init filtering
+  const firstPosts = $(".stream-container").slice(-2); //refresh only last posts
+  if (firstPosts.length) {
+    filter(firstPosts);
+  }
+});
+
 chrome.storage.local.get(settingsKeys, function (data) {
   settings = Object.assign({}, data);
 });
@@ -16,7 +23,7 @@ if (containerElement && isValidFilterUrl("/u/", "/gag/")) {
   createAddObserver(
     containerElement,
     (addedNode) => {
-      if (addedNode.className && addedNode.className.includes("list-view")) {
+      if (typeof addedNode.className === "string" && addedNode.className.includes("list-view")) {
         initialize();
       }
     },
