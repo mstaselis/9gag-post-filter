@@ -82,7 +82,7 @@ async function filter(addedNode) {
 
       //cheers
       if (settings.cheers) {
-        if (post.find(".post-award-users").length) post.find(".post-award-users").hide();
+        if (post.find(".post-award").length) post.find(".post-award").hide();
       }
 
       //hide meme button
