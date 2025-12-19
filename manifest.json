@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "manifest_version": 3,
   "permissions": ["storage"],
+  "host_permissions": ["https://9gag.com/*"],
   "action": {
     "default_popup": "index.html"
   },
@@ -11,10 +12,7 @@
     {
       "css": ["assets/css/content.css"],
       "js": ["assets/js/variables.js", "assets/js/functions.js", "assets/js/cash.js", "assets/js/content.js"],
-      "matches": ["https://9gag.com/*"],
-      "content_security_policy": {
-        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
-      }
+      "matches": ["https://9gag.com/*"]
     }
   ]
 }

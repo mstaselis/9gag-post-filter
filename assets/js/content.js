@@ -13,9 +13,14 @@ let settings = {};
 const userDataCache = new Map();
 const pendingRequests = new Map();
 const processedPosts = new WeakSet();
+let activeIntervals = [];
 
-chrome.storage.local.get(settingsKeys, (data) => {
-  settings = Object.assign({}, data);
+// Promise to track when settings are loaded
+const settingsLoaded = new Promise((resolve) => {
+  chrome.storage.local.get(settingsKeys, (data) => {
+    settings = Object.assign({}, data);
+    resolve();
+  });
 });
 
 chrome.storage.onChanged.addListener((changes) => {
@@ -31,46 +36,75 @@ window.addEventListener("popstate", () => {
   }
 });
 
-const containerElement = document.getElementById("container");
-if (containerElement && isValidFilterUrl("/u/", "/gag/")) {
-  createAddObserver(
-    containerElement,
-    (addedNode) => {
-      if (typeof addedNode.className === "string" && addedNode.className.includes("list-view")) {
-        initialize();
-      }
-    },
-    { childList: true, subtree: true },
-  );
-
-  setTimeout(() => {
-    let attempts = 0;
-    const interval = setInterval(() => {
-      const firstPosts = $(".stream-container");
-      if (firstPosts.length || attempts >= CONSTANTS.MAX_RETRIES) {
-        if (firstPosts.length) {
-          filter(firstPosts);
-        }
-        clearInterval(interval);
-      }
-      attempts++;
-    }, CONSTANTS.CHECK_INTERVAL);
-  }, CONSTANTS.INITIAL_DELAY);
-
-  setInterval(() => {
-    const unprocessedPosts = $("article:not(.filtered):not(.filtering)");
-    if (unprocessedPosts.length > 0) {
-      console.log(`Found ${unprocessedPosts.length} unprocessed posts, filtering...`);
-      unprocessedPosts.each((i, post) => {
-        const $post = $(post);
-        const container = $post.closest(".stream-container");
-        if (container.length) {
-          filter(container);
-        }
-      });
-    }
-  }, CONSTANTS.RECHECK_INTERVAL);
+// Check if jQuery/Cash.js is available
+if (typeof $ === 'undefined') {
+  console.error('9gag Post Filter: jQuery/Cash.js is not loaded. Extension cannot function.');
+  throw new Error('Required library $ is not available');
 }
+
+// Main initialization - wait for settings to load
+(async function initExtension() {
+  await settingsLoaded;
+
+  const containerElement = document.getElementById("container");
+  if (containerElement && isValidFilterUrl("/u/", "/gag/")) {
+    createAddObserver(
+      containerElement,
+      (addedNode) => {
+        if (typeof addedNode.className === "string" && addedNode.className.includes("list-view")) {
+          initialize();
+        }
+      },
+      { childList: true, subtree: true },
+    );
+
+    setTimeout(() => {
+      let attempts = 0;
+      const interval = setInterval(() => {
+        const firstPosts = $(".stream-container");
+        if (firstPosts.length || attempts >= CONSTANTS.MAX_RETRIES) {
+          if (firstPosts.length) {
+            filter(firstPosts);
+          }
+          clearInterval(interval);
+        }
+        attempts++;
+      }, CONSTANTS.CHECK_INTERVAL);
+    }, CONSTANTS.INITIAL_DELAY);
+
+    const recheckInterval = setInterval(() => {
+      const unprocessedPosts = $("article:not(.filtered):not(.filtering)");
+      if (unprocessedPosts.length > 0) {
+        console.log(`Found ${unprocessedPosts.length} unprocessed posts, filtering...`);
+        unprocessedPosts.each((i, post) => {
+          const $post = $(post);
+          const container = $post.closest(".stream-container");
+          if (container.length) {
+            filter(container);
+          }
+        });
+      }
+    }, CONSTANTS.RECHECK_INTERVAL);
+    activeIntervals.push(recheckInterval);
+  }
+})();
+
+// Cleanup intervals on page unload to prevent memory leaks
+window.addEventListener('beforeunload', () => {
+  activeIntervals.forEach(interval => clearInterval(interval));
+  activeIntervals = [];
+});
+
+// Periodic cache cleanup to prevent memory leaks
+const cacheCleanupInterval = setInterval(() => {
+  const now = Date.now();
+  for (const [username, cached] of userDataCache.entries()) {
+    if (now - cached.timestamp >= CONSTANTS.CACHE_DURATION) {
+      userDataCache.delete(username);
+    }
+  }
+}, CONSTANTS.CACHE_DURATION); // Run cleanup every 5 minutes
+activeIntervals.push(cacheCleanupInterval);
 
 function initialize() {
   const listView = document.getElementById("list-view-2");
@@ -163,7 +197,12 @@ async function addUsername(post, articleId) {
     if (!name) return null;
 
     if (!post.find(".ui-post-creator__author").length) {
-      const userLink = `<span>| <a class="user-link" href="https://9gag.com/u/${name}">@${name}</a></span>`;
+      // Sanitize username to prevent XSS
+      const sanitizedName = document.createElement('div');
+      sanitizedName.textContent = name;
+      const safeName = sanitizedName.innerHTML;
+
+      const userLink = `<span>| <a class="user-link" href="https://9gag.com/u/${encodeURIComponent(name)}">@${safeName}</a></span>`;
       post.find(".post-header__left").first().append(userLink);
       post.find(".post-meta.mobile").first().append(userLink);
     }
@@ -178,6 +217,10 @@ async function addUsername(post, articleId) {
 function hideCheersBadges(post) {
   if (settings.cheers && post.find(".post-award").length) {
     post.find(".post-award").hide();
+  }
+
+  if (settings.cheers && post.find(".post-award-users").length) {
+    post.find(".post-award-users").hide();
   }
 }
 
@@ -252,13 +295,16 @@ function handleSpammer(post, avgHoursBetweenPosts) {
 function getPostId(post) {
   try {
     const headerLinks = post.find("header a");
-    if (!headerLinks.length) return null;
+    if (!headerLinks || !headerLinks.length) return null;
 
     const lastLink = headerLinks[headerLinks.length - 1];
     if (!lastLink || !lastLink.href) return null;
 
     const parts = lastLink.href.split("/");
-    return parts[parts.length - 1];
+    if (!parts || parts.length === 0) return null;
+
+    const postId = parts[parts.length - 1];
+    return postId || null;
   } catch (error) {
     console.error("Error getting post ID:", error);
     return null;
@@ -271,20 +317,23 @@ function findPostVotes(posts, postId) {
 }
 
 function addVoteCounts(post, downvotes, upvotes) {
-  if (downvotes === null) return false;
+  if (downvotes === null || upvotes === null) return false;
 
   if (settings.more_downvotes && downvotes >= upvotes) {
     post.hide();
     return true;
   }
 
-  if (settings.always_display_upvotes && post.find(".upvote").eq(1).html() === "•") {
-    post.find(".upvote").eq(1).html(upvotes);
+  const upvoteElement = post.find(".upvote").eq(1);
+  if (settings.always_display_upvotes && upvoteElement.length && upvoteElement.html() === "•") {
+    upvoteElement.html(upvotes);
   }
 
-  const downvoteSpan = `<span class="post-vote__text downvote upvote">${downvotes}</span>`;
+  // Sanitize vote counts (should be numbers, but be safe)
+  const safeDownvotes = parseInt(downvotes, 10) || 0;
+  const downvoteSpan = `<span class="post-vote__text downvote upvote">${safeDownvotes}</span>`;
   post.find(".post-vote").append(downvoteSpan);
-  post.find(".downvote.grouped").after(`<span class="post-vote__text downvote">${downvotes}</span>`);
+  post.find(".downvote.grouped").after(`<span class="post-vote__text downvote">${safeDownvotes}</span>`);
 
   return false;
 }
