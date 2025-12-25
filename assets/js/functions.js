@@ -27,7 +27,16 @@ const getNameFromMenu = async (art_id) => {
         const article = document.querySelector("#" + art_id);
         if (!article) return null;
 
-        // Try desktop menu first
+        // Try mobile alternative - look for user link in post meta
+        // This is non-intrusive and should be prioritized
+        const userLink = article.querySelector("a[href*='/u/']");
+        if (userLink) {
+            const href = userLink.getAttribute("href");
+            const match = href.match(/\/u\/([^\/\?]+)/);
+            if (match) return match[1];
+        }
+
+        // Try desktop menu second - this is intrusive as it clicks elements
         const popupMenu = article.querySelector(".uikit-popup-menu");
         if (popupMenu) {
             const button = popupMenu.querySelector(".button");
@@ -56,14 +65,6 @@ const getNameFromMenu = async (art_id) => {
             // Close menu if we couldn't get the name
             button.click();
             return null;
-        }
-
-        // Try mobile alternative - look for user link in post meta
-        const userLink = article.querySelector("a[href*='/u/']");
-        if (userLink) {
-            const href = userLink.getAttribute("href");
-            const match = href.match(/\/u\/([^\/\?]+)/);
-            return match ? match[1] : null;
         }
 
         return null;

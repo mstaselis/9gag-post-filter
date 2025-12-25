@@ -106,6 +106,29 @@ const cacheCleanupInterval = setInterval(() => {
 }, CONSTANTS.CACHE_DURATION); // Run cleanup every 5 minutes
 activeIntervals.push(cacheCleanupInterval);
 
+// Storage cleanup on initialization
+function cleanupStorageCache() {
+  chrome.storage.local.get(null, (items) => {
+    const now = Date.now();
+    const keysToRemove = [];
+    for (const key in items) {
+      if (key.startsWith('user_cache_')) {
+        const cached = items[key];
+        if (now - cached.timestamp >= CONSTANTS.CACHE_DURATION) {
+          keysToRemove.push(key);
+        }
+      }
+    }
+    if (keysToRemove.length > 0) {
+      chrome.storage.local.remove(keysToRemove);
+      console.log(`Removed ${keysToRemove.length} expired cache entries from storage.`);
+    }
+  });
+}
+
+// Run storage cleanup once on load
+cleanupStorageCache();
+
 function initialize() {
   const listView = document.getElementById("list-view-2");
   if (listView) {
@@ -117,24 +140,63 @@ function initialize() {
   }
 }
 
-function getCachedUserData(username) {
-  const cached = userDataCache.get(username);
-  if (cached && Date.now() - cached.timestamp < CONSTANTS.CACHE_DURATION) {
-    return cached.data;
+async function getCachedUserData(username) {
+  // Try memory cache first
+  const memoryCached = userDataCache.get(username);
+  if (memoryCached && Date.now() - memoryCached.timestamp < CONSTANTS.CACHE_DURATION) {
+    return memoryCached.data;
   }
+
+  // Try storage cache
+  try {
+    const key = `user_cache_${username}`;
+    const result = await chrome.storage.local.get(key);
+    const cached = result[key];
+
+    if (cached && Date.now() - cached.timestamp < CONSTANTS.CACHE_DURATION) {
+      // Populate memory cache for faster subsequent access
+      userDataCache.set(username, cached);
+      return cached.data;
+    }
+  } catch (e) {
+    console.error("Error reading from storage cache:", e);
+  }
+
   return null;
 }
 
-function setCachedUserData(username, data) {
-  userDataCache.set(username, {
-    data,
+function setCachedUserData(username, fullData) {
+  // Minimize data to save space in storage
+  const minimizedData = {
+    data: {
+      profile: {
+        creationTs: fullData.data?.profile?.creationTs
+      },
+      posts: fullData.data?.posts?.map(p => ({
+        id: p.id,
+        creationTs: p.creationTs,
+        upVoteCount: p.upVoteCount,
+        downVoteCount: p.downVoteCount
+      })) || []
+    }
+  };
+
+  const cacheEntry = {
+    data: minimizedData, // We store the object structure with 'data' key to match API response structure
     timestamp: Date.now(),
-  });
+  };
+
+  // Update memory cache
+  userDataCache.set(username, cacheEntry);
+
+  // Update storage cache
+  const key = `user_cache_${username}`;
+  chrome.storage.local.set({ [key]: cacheEntry }).catch(e => console.error("Error writing to storage cache:", e));
 }
 
 async function fetchUserData(username) {
   try {
-    const cached = getCachedUserData(username);
+    const cached = await getCachedUserData(username);
     if (cached) {
       return cached;
     }
