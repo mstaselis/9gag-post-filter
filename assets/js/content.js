@@ -34,6 +34,8 @@ window.addEventListener("popstate", () => {
   if (firstPosts.length) {
     filter(firstPosts);
   }
+  // Attempt to restore scroll position when returning to a page
+  restoreScrollPosition();
 });
 
 // Check if jQuery/Cash.js is available
@@ -437,4 +439,125 @@ async function filter(addedNode) {
   } catch (error) {
     console.error("Error in filter function:", error);
   }
+}
+
+// Scroll position handling
+const SCROLL_STORAGE_PREFIX = '9gag_post_filter_scroll_';
+const HEADER_OFFSET = 60; // Adjust based on 9gag's sticky header
+
+function getStorageKey(path) {
+  return SCROLL_STORAGE_PREFIX + (path || window.location.pathname);
+}
+
+function getTopVisibleArticle() {
+  const articles = document.querySelectorAll('article');
+  for (const article of articles) {
+    const rect = article.getBoundingClientRect();
+    // Return the first article that is substantially visible or at the top
+    if (rect.top >= -100 && rect.top < window.innerHeight && article.id) {
+      return article.id;
+    }
+  }
+  return null;
+}
+
+function saveScrollPosition() {
+  const currentPath = window.location.pathname;
+  const topArticleId = getTopVisibleArticle();
+  const scrollY = window.scrollY;
+
+  const data = {
+    timestamp: Date.now(),
+    articleId: topArticleId,
+    scrollY: scrollY
+  };
+
+  try {
+    sessionStorage.setItem(getStorageKey(currentPath), JSON.stringify(data));
+  } catch (e) {
+    console.warn('Failed to save scroll position', e);
+  }
+}
+
+// Event listener for navigation clicks to save scroll position
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('a');
+  if (link && link.href) {
+    try {
+        const url = new URL(link.href, window.location.origin);
+        // Only save if it's a navigation to a different path on the same origin
+        if (url.origin === window.location.origin && url.pathname !== window.location.pathname) {
+            saveScrollPosition();
+        }
+    } catch (err) {
+        // Ignore invalid URLs
+    }
+  }
+}, true); // Capture phase to ensure we catch it before navigation
+
+function restoreScrollPosition() {
+  const currentPath = window.location.pathname;
+  const key = getStorageKey(currentPath);
+  let savedData = null;
+
+  try {
+    const json = sessionStorage.getItem(key);
+    if (json) {
+      savedData = JSON.parse(json);
+    }
+  } catch (e) {
+    console.warn('Failed to parse saved scroll position', e);
+  }
+
+  if (!savedData) return;
+
+  // We have saved data. Attempt to restore.
+  // We try to find the element first, fallback to pixel scroll.
+  let attempts = 0;
+  const maxAttempts = 20; // 20 * 100ms = 2 seconds
+  const interval = setInterval(() => {
+    let restored = false;
+
+    // Strategy 1: Scroll to specific article
+    if (savedData.articleId) {
+      const article = document.getElementById(savedData.articleId);
+      if (article) {
+        const rect = article.getBoundingClientRect();
+        const absoluteTop = window.scrollY + rect.top;
+        window.scrollTo({
+          top: absoluteTop - HEADER_OFFSET,
+          behavior: 'auto' // Instant jump
+        });
+        restored = true;
+      }
+    }
+
+    // Strategy 2: Fallback to pixel position if article not found (or not saved)
+    // Only if we haven't restored via element yet.
+    if (!restored && savedData.scrollY > 0) {
+      // Check if page height is sufficient
+      if (document.body.scrollHeight >= savedData.scrollY) {
+        window.scrollTo(0, savedData.scrollY);
+        // If we are close enough, consider it done?
+        // No, pixel scroll is brittle. We keep retrying until element appears or timeout?
+        // If we scroll to pixel, we might be done if element never appears.
+
+        // Let's check if we are close to the target
+        if (Math.abs(window.scrollY - savedData.scrollY) < 50) {
+            restored = true;
+        }
+      }
+    }
+
+    attempts++;
+
+    // Stop if we successfully restored (found element) or max attempts reached
+    if (restored || attempts >= maxAttempts) {
+      clearInterval(interval);
+      // Optional: Clear storage after successful restoration?
+      // No, because user might navigate forward and back again.
+      // But maybe we should clear it if we navigate away?
+      // Current logic overwrites on navigation away.
+    }
+  }, 100);
 }
