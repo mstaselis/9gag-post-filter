@@ -29,10 +29,27 @@ chrome.storage.onChanged.addListener((changes) => {
   }
 });
 
+// 9gag is an SPA: clicking into a post's comments or a user profile changes
+// the URL without reloading the content script, so watchers set up on the
+// feed keep running there too unless they re-check the URL every time.
+function shouldFilter() {
+  return isValidFilterUrl("/u/", "/gag/");
+}
+
 window.addEventListener("popstate", () => {
+  if (!shouldFilter()) return;
+
+  // Snapshot the scroll position the browser/site just restored, since our
+  // async filtering (network calls per post) can shrink the page afterwards
+  // and silently drag the viewport away from where the user actually was.
+  const targetScrollY = window.scrollY;
   const firstPosts = $(".stream-container").slice(-2);
   if (firstPosts.length) {
-    filter(firstPosts);
+    filter(firstPosts).then(() => {
+      if (window.scrollY !== targetScrollY) {
+        window.scrollTo(0, targetScrollY);
+      }
+    });
   }
 });
 
@@ -73,6 +90,10 @@ if (typeof $ === 'undefined') {
     }, CONSTANTS.INITIAL_DELAY);
 
     const recheckInterval = setInterval(() => {
+      if (document.visibilityState !== "visible" || !shouldFilter()) {
+        return;
+      }
+
       const unprocessedPosts = $("article:not(.filtered):not(.filtering)");
       if (unprocessedPosts.length > 0) {
         console.log(`Found ${unprocessedPosts.length} unprocessed posts, filtering...`);
@@ -110,7 +131,7 @@ function initialize() {
   const listView = document.getElementById("list-view-2");
   if (listView) {
     createAddObserver(listView, (addedNode) => {
-      if (addedNode.className && addedNode.className.includes("stream-container")) {
+      if (addedNode.className && addedNode.className.includes("stream-container") && shouldFilter()) {
         filter(addedNode);
       }
     });
@@ -248,10 +269,35 @@ function addAccountAge(post, days) {
   }
 }
 
+// Collapses a post's reserved space without letting the page jump under the
+// user: if the post already scrolled past (above the viewport), we shrink
+// scrollY by the same amount we just removed so content on screen doesn't move.
+function collapsePost(post, { mode = "class" } = {}) {
+  const rect = post[0].getBoundingClientRect();
+  const isAboveViewport = rect.bottom < 0;
+  const height = isAboveViewport ? post.outerHeight(true) : 0;
+  const container = post.closest(".stream-container").first();
+
+  if (mode === "remove") {
+    post.remove();
+  } else if (mode === "hide") {
+    post.hide();
+  } else {
+    post.addClass("hidden filtered");
+  }
+
+  if (container.length) {
+    container.css("min-height", "auto");
+  }
+
+  if (isAboveViewport && height) {
+    window.scrollBy(0, -height);
+  }
+}
+
 function filterByMinDays(post, days) {
   if (settings.min_days > 0 && settings.min_days > days) {
-    post.addClass("hidden filtered");
-    post.closest(".stream-container").first().css("min-height", "auto");
+    collapsePost(post);
     return true;
   }
   return false;
@@ -277,7 +323,7 @@ function handleSpammer(post, avgHoursBetweenPosts) {
 
   if (avgHoursBetweenPosts < threshold) {
     if (settings.hide_spammers) {
-      post.remove();
+      collapsePost(post, { mode: "remove" });
       return true;
     } else {
       const label = `<span class="spammer-label">| SPAMMER</span>`;
@@ -320,7 +366,7 @@ function addVoteCounts(post, downvotes, upvotes) {
   if (downvotes === null || upvotes === null) return false;
 
   if (settings.more_downvotes && downvotes >= upvotes) {
-    post.hide();
+    collapsePost(post, { mode: "hide" });
     return true;
   }
 
@@ -359,8 +405,20 @@ async function processPost(post) {
       return;
     }
 
+    if (!shouldFilter()) {
+      // Navigated away (e.g. into comments) before this post's turn came up.
+      post.addClass("filtered");
+      return;
+    }
+
     const username = await addUsername(post, articleId);
     if (!username) {
+      post.addClass("filtered");
+      return;
+    }
+
+    if (!shouldFilter()) {
+      // Navigated away while the username lookup was in flight.
       post.addClass("filtered");
       return;
     }
@@ -368,6 +426,13 @@ async function processPost(post) {
     if (settings.show_days || settings.min_days > 0 || settings.spammers || settings.more_downvotes || settings.always_display_upvotes) {
       const userData = await fetchUserData(username);
       if (!userData || !userData.data) {
+        post.addClass("filtered");
+        return;
+      }
+
+      if (!shouldFilter()) {
+        // Navigated away while the user-data fetch was in flight — this is
+        // the common case, since that network round trip is the slowest step.
         post.addClass("filtered");
         return;
       }
@@ -413,24 +478,22 @@ async function processPost(post) {
 
 async function filter(addedNode) {
   try {
+    // Full-document catch-up for anything this call misses is handled by the
+    // recheckInterval safety net, so we only need to look inside addedNode here.
     const posts = $(addedNode)
       .contents()
       .find("article:not(.filtered):not(.filtering)")
-      .add($(addedNode).filter("article:not(.filtered):not(.filtering)"))
-      .add($(".list-view__content article:not(.filtered):not(.filtering)"));
+      .add($(addedNode).filter("article:not(.filtered):not(.filtering)"));
 
     if (!posts.length) {
       return;
-    }
-
-    if (settings.hide_spammers || settings.more_downvotes) {
-      $(addedNode).addClass("filtered");
     }
 
     const BATCH_SIZE = 5;
     const postsArray = posts.get();
 
     for (let i = 0; i < postsArray.length; i += BATCH_SIZE) {
+      if (!shouldFilter()) break;
       const batch = postsArray.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map((element) => processPost($(element))));
     }

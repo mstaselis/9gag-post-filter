@@ -23,7 +23,3 @@
     color: red;
     font-weight: bold;
 }
-
-.stream-container.filtered {
-    min-height: auto !important;
-}
