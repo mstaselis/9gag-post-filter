@@ -174,6 +174,8 @@ async function fetchUserData(username) {
       },
       referrer: "https://9gag.com",
       referrerPolicy: "strict-origin-when-cross-origin",
+      // 9GAG's user-posts endpoint only accepts POST requests (it rejects GET).
+      // No request body is needed — the username is passed in the URL path.
       method: "POST",
       mode: "cors",
       credentials: "include",
@@ -308,12 +310,14 @@ function calculateSpamScore(posts) {
     return null;
   }
 
-  const postDiffs = posts.map((p, i) => {
-    if (i === 0) {
-      return (Date.now() / 1000 - p.creationTs) / 3600;
-    }
-    return (posts[i - 1].creationTs - p.creationTs) / 3600;
+  // Compute inter-post gaps only (skip index 0, which is time-since-last-post,
+  // not a gap between posts — including it would skew the average for users
+  // who simply haven't posted recently).
+  const postDiffs = posts.slice(1).map((p, i) => {
+    return (posts[i].creationTs - p.creationTs) / 3600;
   });
+
+  if (postDiffs.length === 0) return null;
 
   return postDiffs.reduce((a, b) => a + b) / postDiffs.length;
 }
@@ -371,7 +375,10 @@ function addVoteCounts(post, downvotes, upvotes) {
   }
 
   const upvoteElement = post.find(".upvote").eq(1);
-  if (settings.always_display_upvotes && upvoteElement.length && upvoteElement.html() === "•") {
+  // The upvote count is hidden behind a "•" bullet when the site decides not to
+  // show it. Use a trimmed comparison so minor whitespace differences don't
+  // silently break the feature.
+  if (settings.always_display_upvotes && upvoteElement.length && upvoteElement.html().trim() === "•") {
     upvoteElement.html(upvotes);
   }
 
