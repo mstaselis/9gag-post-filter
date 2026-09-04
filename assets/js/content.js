@@ -253,6 +253,24 @@ function hideMemeButton(post) {
   }
 }
 
+// Matches any Unicode emoji character (covers Emoji_Presentation and common
+// symbol/pictograph blocks used by 9GAG post titles).
+const EMOJI_REGEX = /[\u{1F300}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[\u{1F000}-\u{1F02F}]/u;
+
+function filterByEmojiTitle(post) {
+  if (!settings.hide_emoji_title) return false;
+
+  const titleEl = post.find("header h2").first();
+  if (!titleEl.length) return false;
+
+  const title = titleEl.text();
+  if (EMOJI_REGEX.test(title)) {
+    collapsePost(post);
+    return true;
+  }
+  return false;
+}
+
 function calculateAccountAge(creationTs) {
   const now = Date.now() / 1000;
   const diff = now - creationTs;
@@ -405,6 +423,8 @@ async function processPost(post) {
     addVideoControls(post);
     hideCheersBadges(post);
     hideMemeButton(post);
+
+    if (filterByEmojiTitle(post)) return;
 
     const articleId = post.attr("id");
     if (!articleId) {

@@ -12,6 +12,7 @@ chrome.storage.local.get(settingsKeys, (data) => {
   $("#always_display_upvotes_checkbox").prop("checked", data.always_display_upvotes);
   $("#show_controls_checkbox").prop("checked", data.show_controls);
   $("#hide_meme_checkbox").prop("checked", data.hide_meme);
+  $("#hide_emoji_title_checkbox").prop("checked", data.hide_emoji_title);
 });
 
 // Generic handler for all toggle switches
@@ -24,6 +25,7 @@ const checkboxMap = {
   always_display_upvotes_checkbox:  "always_display_upvotes",
   show_controls_checkbox:           "show_controls",
   hide_meme_checkbox:               "hide_meme",
+  hide_emoji_title_checkbox:        "hide_emoji_title",
 };
 
 for (const [id, key] of Object.entries(checkboxMap)) {
