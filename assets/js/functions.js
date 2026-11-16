@@ -32,26 +32,30 @@ function clickWithoutNavigating(element) {
     element.click();
 }
 
-const getNameFromMenu = async (art_id) => {
+const getNameFromMenu = async (article) => {
     try {
-        const article = document.querySelector("#" + art_id);
         if (!article) return null;
 
         // Prefer the non-invasive path: read the username straight off a
         // profile link already in the post markup, no simulated clicks needed.
-        const userLink = article.querySelector("a[href*='/u/']");
+        // Skip the "Cheered by" avatars and the top comment: those link to
+        // other users, not the post's author, and they come before the author
+        // link in the markup.
+        const userLink = Array.from(article.querySelectorAll(SELECTORS.authorProfileLink)).find(
+            (link) => !link.classList.contains("user-link") && !link.closest(SELECTORS.otherUserLinkContainers)
+        );
         if (userLink) {
             const href = userLink.getAttribute("href");
-            const match = href.match(/\/u\/([^\/\?]+)/);
+            const match = href.match(/\/u\/([^\/?#]+)/);
             if (match) return match[1];
         }
 
         // Fall back to opening the post's own menu and reading the name from
         // it. This simulates real clicks (and could interrupt a menu the user
         // has open), so only do it when the link lookup above found nothing.
-        const popupMenu = article.querySelector(".uikit-popup-menu");
+        const popupMenu = article.querySelector(SELECTORS.postMenu);
         if (popupMenu) {
-            const button = popupMenu.querySelector(".button");
+            const button = popupMenu.querySelector(SELECTORS.postMenuButton);
             if (!button) return null;
 
             // Click to open menu
@@ -59,7 +63,7 @@ const getNameFromMenu = async (art_id) => {
 
             // Wait for menu to populate with a timeout
             const menuLinks = await waitForElement(
-                () => popupMenu.querySelectorAll(".menu a"),
+                () => popupMenu.querySelectorAll(SELECTORS.postMenuLinks),
                 1000
             );
 

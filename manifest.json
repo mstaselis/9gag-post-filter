@@ -21,7 +21,7 @@
   "content_scripts": [
     {
       "css": ["assets/css/content.css"],
-      "js": ["assets/js/variables.js", "assets/js/functions.js", "assets/js/cash.js", "assets/js/content.js"],
+      "js": ["assets/js/variables.js", "assets/js/selectors.js", "assets/js/functions.js", "assets/js/cash.js", "assets/js/content.js"],
       "matches": ["https://9gag.com/*"]
     }
   ]

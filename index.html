@@ -1,6 +1,8 @@
 <!doctype html>
 <html>
     <head>
+        <meta charset="utf-8" />
+        <title>9gag post filter</title>
         <link rel="stylesheet" href="assets/css/pico.jade.css" />
         <link rel="stylesheet" href="assets/css/index.css" />
     </head>
@@ -11,13 +13,13 @@
                 <div><input type="checkbox" name="days" id="days_checkbox" role="switch" /></div>
 
                 <label for="days_input">Minimum account age (days)</label>
-                <div><input type="number" name="min_days" id="days_input" placeholder="example: 300" /></div>
+                <div><input type="number" name="min_days" id="days_input" min="1" step="1" placeholder="example: 300" /></div>
 
                 <label for="spammers_checkbox">Mark spammers</label>
                 <div><input type="checkbox" name="spammers" id="spammers_checkbox" role="switch" /></div>
 
                 <label for="spammers_hours_input">Spammer threshold (hours/post)</label>
-                <div><input type="number" name="spammers_hours" id="spammers_hours_input" placeholder="example: 12" /></div>
+                <div><input type="number" name="spammers_hours" id="spammers_hours_input" min="0" step="any" placeholder="example: 12" /></div>
 
                 <label for="cheers_checkbox">Hide cheers</label>
                 <div><input type="checkbox" name="cheers" id="cheers_checkbox" role="switch" /></div>
@@ -39,6 +41,10 @@
 
                 <label for="hide_emoji_title_checkbox">Hide posts with emojis in title</label>
                 <div><input type="checkbox" name="hide_emoji_title" id="hide_emoji_title_checkbox" role="switch" /></div>
+                <label for="remove_hidden_checkbox">Remove hidden posts completely (no "Hidden: reason" bar)</label>
+                <div><input type="checkbox" name="remove_hidden" id="remove_hidden_checkbox" role="switch" /></div>
+                <label for="wide_media_checkbox">Full-width media</label>
+                <div><input type="checkbox" name="wide_media" id="wide_media_checkbox" role="switch" /></div>
             </div>
         </main>
         <script src="assets/js/cash.js"></script>

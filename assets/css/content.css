@@ -1,3 +1,111 @@
+/* Posts hidden by the filter collapse to the .hidden-bar we prepend to them
+   (everything else in the article is hidden) until the user clicks "Show".
+   With "Remove hidden posts completely" on they get .removed and disappear. */
+article.filtered.hidden:not(.revealed) > :not(.hidden-bar) {
+    display: none !important;
+}
+
+article.filtered.hidden.removed {
+    display: none !important;
+}
+
+.hidden-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 12px;
+    padding: 6px 10px;
+    border: 1px dashed;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--palette-text-normal);
+    opacity: 0.7;
+}
+
+.hidden-bar:hover {
+    opacity: 1;
+}
+
+.hidden-bar__reason {
+    flex-shrink: 0;
+    font-weight: bold;
+}
+
+.hidden-bar__title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.hidden-bar__toggle {
+    flex-shrink: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+/* 9gag reserves each stream's height with an inline min-height on
+   .stream-container. It is a Vue style binding (anything we write there is
+   overwritten on the next render) and it is measured when the stream scrolls
+   into range, usually before our per-post network checks finish, so it still
+   includes posts we hide afterwards and leaves a blank gap at the bottom of the
+   stream. Drop it only for streams that are actually rendered: streams that
+   scrolled far away are "archived" into empty <article>s and rely on that
+   min-height to keep the scroll position stable. */
+.stream-container:has(.list-stream article header) {
+    min-height: 0 !important;
+}
+
+/* "Full-width media" toggle (html[data-pf-wide-media], set by content.js).
+   9gag's post-list-item component (scoped styles in gag.js) caps media at
+   --list-media-max-width (500px, also set inline on each article), indents
+   media, the vote bar, polls and the comment preview by margin-left: 52px to
+   line up with the title, and sizes .post-view / <img> / <video> with inline
+   px width/height/max-width from JS, which is why everything needs !important.
+   Height is capped so tall posts still fit on screen. */
+html[data-pf-wide-media] article.post-list-item {
+    --list-media-max-width: 100% !important;
+}
+
+html[data-pf-wide-media] .post-list-item__media,
+html[data-pf-wide-media] .post-list-item__afterbar,
+html[data-pf-wide-media] .post-list-item .post-poll,
+html[data-pf-wide-media] .post-list-item .post-action-comment {
+    margin-left: 0 !important;
+}
+
+html[data-pf-wide-media] .post-list-item__media {
+    width: 100% !important;
+    max-width: none !important;
+}
+
+html[data-pf-wide-media] .post-list-item__media .post-view {
+    width: 100% !important;
+    height: auto !important;
+    max-width: none !important;
+}
+
+html[data-pf-wide-media] .post-list-item__media .post-view :is(img, video) {
+    width: 100% !important;
+    height: auto !important;
+    max-width: none !important;
+    max-height: 85vh;
+    object-fit: contain;
+}
+
+/* "Hide cheers" / "Hide create meme button" toggles. Done in CSS rather than
+   inline styles so they survive Vue re-renders and follow the popup live. */
+html[data-pf-hide-cheers] article :is(.post-award, .post-award-users),
+html[data-pf-hide-meme] article .create-meme-btn {
+    display: none !important;
+}
+
 .sound-toggle {
     top: 2px !important;
     right: 5px !important;

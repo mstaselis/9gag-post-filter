@@ -3,31 +3,46 @@ const CONSTANTS = {
   INITIAL_DELAY: 500,
   MAX_RETRIES: 10,
   CACHE_DURATION: 5 * 60 * 1000,
+  FAILED_CACHE_DURATION: 30 * 1000,
   SECONDS_PER_DAY: 86400,
   DEFAULT_SPAMMER_HOURS: 12,
   MIN_POSTS_FOR_SPAM_CHECK: 10,
   RECHECK_INTERVAL: 2000,
+  MIN_POSTS_FOR_SELECTOR_CHECK: 5,
 };
 
 let settings = {};
 const userDataCache = new Map();
 const pendingRequests = new Map();
 const processedPosts = new WeakSet();
-let activeIntervals = [];
 
 // Promise to track when settings are loaded
 const settingsLoaded = new Promise((resolve) => {
   chrome.storage.local.get(settingsKeys, (data) => {
     settings = Object.assign({}, data);
+    applyPageClasses();
     resolve();
   });
 });
 
-chrome.storage.onChanged.addListener((changes) => {
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local") return;
   for (const [key, { newValue }] of Object.entries(changes)) {
     settings[key] = newValue;
   }
+  applyPageClasses();
 });
+
+// Pure-CSS options are switched with a data attribute on <html>, so they apply
+// to posts already on the page and take effect the moment the popup toggle
+// changes. Not a class: 9gag assigns <html>'s className when it applies the
+// theme ("html-dark"), which wipes any class set before that.
+function applyPageClasses() {
+  const root = document.documentElement;
+  root.toggleAttribute("data-pf-wide-media", !!settings.wide_media);
+  root.toggleAttribute("data-pf-hide-cheers", !!settings.cheers);
+  root.toggleAttribute("data-pf-hide-meme", !!settings.hide_meme);
+}
 
 // 9gag is an SPA: clicking into a post's comments or a user profile changes
 // the URL without reloading the content script, so watchers set up on the
@@ -43,9 +58,9 @@ window.addEventListener("popstate", () => {
   // async filtering (network calls per post) can shrink the page afterwards
   // and silently drag the viewport away from where the user actually was.
   const targetScrollY = window.scrollY;
-  const firstPosts = $(".stream-container").slice(-2);
-  if (firstPosts.length) {
-    filter(firstPosts).then(() => {
+  const unprocessedPosts = $("article:not(.filtered):not(.filtering)");
+  if (unprocessedPosts.length) {
+    filter(unprocessedPosts).then(() => {
       if (window.scrollY !== targetScrollY) {
         window.scrollTo(0, targetScrollY);
       }
@@ -59,97 +74,107 @@ if (typeof $ === 'undefined') {
   throw new Error('Required library $ is not available');
 }
 
-// Main initialization - wait for settings to load
+// Main initialization - wait for settings to load.
+//
+// 9gag now ships an empty shell (<div id="jsid-app"> plus a spinner) and
+// renders the whole feed client-side, so there is no #container / #list-view-2
+// to hook at load time and their names keep changing between layout
+// experiments. Watch the whole body for <article> posts instead, which is the
+// one thing that has stayed stable.
 (async function initExtension() {
   await settingsLoaded;
 
-  const containerElement = document.getElementById("container");
-  if (containerElement && isValidFilterUrl("/u/", "/gag/")) {
-    createAddObserver(
-      containerElement,
-      (addedNode) => {
-        if (typeof addedNode.className === "string" && addedNode.className.includes("list-view")) {
-          initialize();
-        }
-      },
-      { childList: true, subtree: true },
-    );
-
-    setTimeout(() => {
-      let attempts = 0;
-      const interval = setInterval(() => {
-        const firstPosts = $(".stream-container");
-        if (firstPosts.length || attempts >= CONSTANTS.MAX_RETRIES) {
-          if (firstPosts.length) {
-            filter(firstPosts);
-          }
-          clearInterval(interval);
-        }
-        attempts++;
-      }, CONSTANTS.CHECK_INTERVAL);
-    }, CONSTANTS.INITIAL_DELAY);
-
-    const recheckInterval = setInterval(() => {
-      if (document.visibilityState !== "visible" || !shouldFilter()) {
-        return;
+  createAddObserver(
+    document.body,
+    (addedNode) => {
+      if (addedNode.nodeType !== Node.ELEMENT_NODE || !shouldFilter()) return;
+      if (addedNode.matches("article") || addedNode.querySelector("article")) {
+        filter(addedNode);
+      } else if (addedNode.closest("article")) {
+        // Content filled into an existing (previously empty) article.
+        filter(addedNode.closest("article"));
       }
+    },
+    { childList: true, subtree: true },
+  );
 
-      const unprocessedPosts = $("article:not(.filtered):not(.filtering)");
-      if (unprocessedPosts.length > 0) {
-        console.log(`Found ${unprocessedPosts.length} unprocessed posts, filtering...`);
-        unprocessedPosts.each((i, post) => {
-          const $post = $(post);
-          const container = $post.closest(".stream-container");
-          if (container.length) {
-            filter(container);
-          }
-        });
-      }
-    }, CONSTANTS.RECHECK_INTERVAL);
-    activeIntervals.push(recheckInterval);
+  if (shouldFilter()) {
+    filter(document.body);
   }
+
+  // Safety net for posts whose <article> was inserted empty and filled in
+  // later, or that the observer otherwise missed.
+  setInterval(() => {
+    if (document.visibilityState !== "visible" || !shouldFilter()) {
+      return;
+    }
+
+    checkSelectorHealth();
+
+    const unprocessedPosts = $("article:not(.filtered):not(.filtering)");
+    if (unprocessedPosts.length > 0) {
+      filter(unprocessedPosts);
+    }
+  }, CONSTANTS.RECHECK_INTERVAL);
 })();
 
-// Cleanup intervals on page unload to prevent memory leaks
-window.addEventListener('beforeunload', () => {
-  activeIntervals.forEach(interval => clearInterval(interval));
-  activeIntervals = [];
-});
+// 9gag changes its markup every few months and the extension then fails
+// silently: labels go nowhere, votes aren't found. Once a few posts have been
+// processed, warn (once per selector per page load) about any required
+// selector that none of them match, so the next breakage names its own cause.
+const warnedSelectors = new Set();
+
+function warnSelectorOnce(key, message) {
+  if (warnedSelectors.has(key)) return;
+  warnedSelectors.add(key);
+  console.warn(`9gag Post Filter: ${message} 9gag has probably changed its layout; update assets/js/selectors.js.`);
+}
+
+function checkSelectorHealth() {
+  const articles = document.querySelectorAll("article");
+  if (!articles.length) {
+    // Posts are still there, just no longer rendered as <article>.
+    if (document.querySelectorAll("a[href*='/gag/']").length >= CONSTANTS.MIN_POSTS_FOR_SELECTOR_CHECK) {
+      warnSelectorOnce("article", "the page has post links but no <article> elements.");
+    }
+    return;
+  }
+
+  const renderedPosts = Array.from(articles).filter(
+    (article) => article.classList.contains("filtered") && article.querySelector(SELECTORS.header),
+  );
+  if (renderedPosts.length < CONSTANTS.MIN_POSTS_FOR_SELECTOR_CHECK) return;
+
+  for (const [key, selector] of Object.entries(REQUIRED_SELECTORS)) {
+    if (!renderedPosts.some((post) => post.querySelector(selector))) {
+      warnSelectorOnce(key, `SELECTORS.${key} ("${selector}") matched 0 of ${renderedPosts.length} posts.`);
+    }
+  }
+}
 
 // Periodic cache cleanup to prevent memory leaks
-const cacheCleanupInterval = setInterval(() => {
+setInterval(() => {
   const now = Date.now();
   for (const [username, cached] of userDataCache.entries()) {
-    if (now - cached.timestamp >= CONSTANTS.CACHE_DURATION) {
+    if (now >= cached.expires) {
       userDataCache.delete(username);
     }
   }
 }, CONSTANTS.CACHE_DURATION); // Run cleanup every 5 minutes
-activeIntervals.push(cacheCleanupInterval);
 
-function initialize() {
-  const listView = document.getElementById("list-view-2");
-  if (listView) {
-    createAddObserver(listView, (addedNode) => {
-      if (addedNode.className && addedNode.className.includes("stream-container") && shouldFilter()) {
-        filter(addedNode);
-      }
-    });
-  }
-}
-
+// Returns the cache entry ({ data }) or undefined. A failed lookup is cached
+// too, with data === null and a short lifetime, so a user whose request fails
+// (rate limit, deleted account) isn't re-requested for every one of their
+// posts on the page.
 function getCachedUserData(username) {
   const cached = userDataCache.get(username);
-  if (cached && Date.now() - cached.timestamp < CONSTANTS.CACHE_DURATION) {
-    return cached.data;
-  }
-  return null;
+  return cached && Date.now() < cached.expires ? cached : undefined;
 }
 
 function setCachedUserData(username, data) {
   userDataCache.set(username, {
     data,
-    timestamp: Date.now(),
+    expires: Date.now() + (data ? CONSTANTS.CACHE_DURATION : CONSTANTS.FAILED_CACHE_DURATION),
   });
 }
 
@@ -157,23 +182,15 @@ async function fetchUserData(username) {
   try {
     const cached = getCachedUserData(username);
     if (cached) {
-      return cached;
+      return cached.data;
     }
 
     if (pendingRequests.has(username)) {
       return await pendingRequests.get(username);
     }
 
-    const requestPromise = fetch(`https://9gag.com/v1/user-posts/username/${username}/type/posts`, {
-      headers: {
-        accept: "*/*",
-        "accept-language": "en-US,en;q=0.5",
-        "sec-fetch-dest": "empty",
-        "sec-fetch-mode": "cors",
-        "sec-fetch-site": "same-origin",
-      },
-      referrer: "https://9gag.com",
-      referrerPolicy: "strict-origin-when-cross-origin",
+    const requestPromise = fetch(`https://9gag.com/v1/user-posts/username/${encodeURIComponent(username)}/type/posts`, {
+      headers: { accept: "*/*" },
       // 9GAG's user-posts endpoint only accepts POST requests (it rejects GET).
       // No request body is needed — the username is passed in the URL path.
       method: "POST",
@@ -192,6 +209,7 @@ async function fetchUserData(username) {
         return json;
       })
       .catch((error) => {
+        setCachedUserData(username, null);
         pendingRequests.delete(username);
         console.error(`Failed to fetch user data for ${username}:`, error);
         return null;
@@ -208,26 +226,39 @@ async function fetchUserData(username) {
 function addVideoControls(post) {
   if (!settings.show_controls) return;
 
-  const video = post.find("video").first();
+  const video = post.find(SELECTORS.video).first();
   if (video.length) {
     video.attr("controls", "controls");
   }
 }
 
-async function addUsername(post, articleId) {
+// Appends our labels next to the post's author/time line, in the first of
+// SELECTORS.postMetaTargets the post has.
+function appendToPostMeta(post, html) {
+  for (const selector of SELECTORS.postMetaTargets) {
+    const target = post.find(selector).first();
+    if (target.length) {
+      target.append(html);
+      return;
+    }
+  }
+}
+
+async function addUsername(post) {
   try {
-    const name = await getNameFromMenu(articleId);
+    const name = await getNameFromMenu(post[0]);
     if (!name) return null;
 
-    if (!post.find(".ui-post-creator__author").length) {
+    // Skip when the header already shows the author (user posts link the
+    // byline name to their profile; interest posts show the interest instead).
+    const authorShown = post.find(SELECTORS.authorShown).length;
+    if (!authorShown) {
       // Sanitize username to prevent XSS
       const sanitizedName = document.createElement('div');
       sanitizedName.textContent = name;
       const safeName = sanitizedName.innerHTML;
 
-      const userLink = `<span>| <a class="user-link" href="https://9gag.com/u/${encodeURIComponent(name)}">@${safeName}</a></span>`;
-      post.find(".post-header__left").first().append(userLink);
-      post.find(".post-meta.mobile").first().append(userLink);
+      appendToPostMeta(post, `<span>| <a class="user-link" href="https://9gag.com/u/${encodeURIComponent(name)}">@${safeName}</a></span>`);
     }
 
     return name;
@@ -237,35 +268,22 @@ async function addUsername(post, articleId) {
   }
 }
 
-function hideCheersBadges(post) {
-  if (settings.cheers && post.find(".post-award").length) {
-    post.find(".post-award").hide();
-  }
-
-  if (settings.cheers && post.find(".post-award-users").length) {
-    post.find(".post-award-users").hide();
-  }
-}
-
-function hideMemeButton(post) {
-  if (settings.hide_meme) {
-    post.find(".create-meme-btn").hide();
-  }
-}
-
-// Matches any Unicode emoji character (covers Emoji_Presentation and common
-// symbol/pictograph blocks used by 9GAG post titles).
-const EMOJI_REGEX = /[\u{1F300}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FEFF}]|[\u{1F000}-\u{1F02F}]/u;
+// Matches emoji: everything that renders as an emoji by default, the symbol /
+// dingbat / pictograph blocks, and the emoji variation selector (U+FE0F), which
+// turns text symbols such as "❤" into emoji. Only U+FE0F is matched from its
+// block: the rest of U+FE00-FEFF is Arabic and CJK presentation forms, so the
+// whole range hid every post with an Arabic title.
+const EMOJI_REGEX = /\p{Emoji_Presentation}|[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
 
 function filterByEmojiTitle(post) {
   if (!settings.hide_emoji_title) return false;
 
-  const titleEl = post.find("header h2").first();
+  const titleEl = post.find(SELECTORS.title).first();
   if (!titleEl.length) return false;
 
   const title = titleEl.text();
   if (EMOJI_REGEX.test(title)) {
-    collapsePost(post);
+    collapsePost(post, "emoji in title");
     return true;
   }
   return false;
@@ -280,44 +298,83 @@ function calculateAccountAge(creationTs) {
 function addAccountAge(post, days) {
   if (!settings.show_days) return;
 
-  const diffSpan = `<span>| ${days} days </span>`;
-  if (post.find(".ui-post-creator").length) {
-    post.find(".ui-post-creator").append(diffSpan);
+  appendToPostMeta(post, `<span>| ${days} days </span>`);
+}
+
+// Puts a one-line "Hidden: <reason> · <title> · Show" bar at the top of a
+// collapsed post (content.css hides everything else in it). The bar lives
+// inside the <article> rather than next to it so it doesn't add nodes to the
+// list Vue manages, and is dropped together with the post if Vue replaces it.
+function addHiddenBar(post, reason) {
+  if (post.children(".hidden-bar").length) return;
+
+  const bar = document.createElement("div");
+  bar.className = "hidden-bar";
+
+  const reasonEl = document.createElement("span");
+  reasonEl.className = "hidden-bar__reason";
+  reasonEl.textContent = `Hidden: ${reason}`;
+
+  const titleEl = document.createElement("span");
+  titleEl.className = "hidden-bar__title";
+  titleEl.textContent = post.find(SELECTORS.title).first().text();
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "hidden-bar__toggle";
+  toggle.textContent = "Show";
+  toggle.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const revealed = post[0].classList.toggle("revealed");
+    toggle.textContent = revealed ? "Hide" : "Show";
+  });
+
+  bar.append(reasonEl, titleEl, toggle);
+  post[0].prepend(bar);
+}
+
+// Collapses a filtered post without letting the page jump under the user: if
+// the post already scrolled past (above the viewport), we shrink scrollY by the
+// same amount we just removed so content on screen doesn't move.
+//
+// Hiding is done purely with classes (see content.css). 9gag owns this DOM via
+// Vue, so removing the <article> or writing inline styles is fragile: Vue can
+// re-render the list at any time (infinite scroll, archiving streams that
+// scroll far away and restoring them later), and it re-applies the inline
+// min-height it uses to reserve each stream's space. The <article> itself has
+// no class binding, so classes we add survive those re-renders.
+function collapsePost(post, reason) {
+  const isAboveViewport = post[0].getBoundingClientRect().bottom < 0;
+  const heightBefore = isAboveViewport ? post.outerHeight(true) : 0;
+
+  if (settings.remove_hidden) {
+    post.addClass("removed");
   } else {
-    post.find(".post-header__left").append(diffSpan);
-    post.find(".post-meta.mobile").append(diffSpan);
+    addHiddenBar(post, reason);
+  }
+  post.addClass("hidden filtered");
+
+  if (isAboveViewport) {
+    const heightAfter = settings.remove_hidden ? 0 : post.outerHeight(true);
+    if (heightBefore > heightAfter) {
+      window.scrollBy(0, heightAfter - heightBefore);
+    }
   }
 }
 
-// Collapses a post's reserved space without letting the page jump under the
-// user: if the post already scrolled past (above the viewport), we shrink
-// scrollY by the same amount we just removed so content on screen doesn't move.
-function collapsePost(post, { mode = "class" } = {}) {
-  const rect = post[0].getBoundingClientRect();
-  const isAboveViewport = rect.bottom < 0;
-  const height = isAboveViewport ? post.outerHeight(true) : 0;
-  const container = post.closest(".stream-container").first();
-
-  if (mode === "remove") {
-    post.remove();
-  } else if (mode === "hide") {
-    post.hide();
-  } else {
-    post.addClass("hidden filtered");
-  }
-
-  if (container.length) {
-    container.css("min-height", "auto");
-  }
-
-  if (isAboveViewport && height) {
-    window.scrollBy(0, -height);
-  }
+// Popup number inputs are stored as strings, and older versions saved "" when
+// the box was cleared. Returns null for anything that isn't a positive number
+// so callers fall back to their default instead of comparing against "" (== 0).
+function parsePositiveNumber(value) {
+  const number = parseFloat(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
 }
 
 function filterByMinDays(post, days) {
-  if (settings.min_days > 0 && settings.min_days > days) {
-    collapsePost(post);
+  const minDays = parsePositiveNumber(settings.min_days);
+  if (minDays !== null && minDays > days) {
+    collapsePost(post, `account ${days} days old`);
     return true;
   }
   return false;
@@ -328,33 +385,27 @@ function calculateSpamScore(posts) {
     return null;
   }
 
-  // Compute inter-post gaps only (skip index 0, which is time-since-last-post,
-  // not a gap between posts — including it would skew the average for users
-  // who simply haven't posted recently).
-  const postDiffs = posts.slice(1).map((p, i) => {
-    return (posts[i].creationTs - p.creationTs) / 3600;
-  });
+  // Average gap between consecutive posts = time from oldest to newest divided
+  // by the number of gaps. Time since the last post is deliberately left out
+  // (it would skew the average for users who simply haven't posted recently),
+  // and using min/max keeps it correct when the API doesn't return the posts
+  // newest-first (pinned posts).
+  const timestamps = posts.map((p) => Number(p.creationTs)).filter(Number.isFinite);
+  if (timestamps.length < CONSTANTS.MIN_POSTS_FOR_SPAM_CHECK) return null;
 
-  if (postDiffs.length === 0) return null;
-
-  return postDiffs.reduce((a, b) => a + b) / postDiffs.length;
+  const spanHours = (Math.max(...timestamps) - Math.min(...timestamps)) / 3600;
+  return spanHours / (timestamps.length - 1);
 }
 
 function handleSpammer(post, avgHoursBetweenPosts) {
-  const threshold = !isNaN(settings.spammers_hours) ? settings.spammers_hours : CONSTANTS.DEFAULT_SPAMMER_HOURS;
+  const threshold = parsePositiveNumber(settings.spammers_hours) ?? CONSTANTS.DEFAULT_SPAMMER_HOURS;
 
   if (avgHoursBetweenPosts < threshold) {
     if (settings.hide_spammers) {
-      collapsePost(post, { mode: "remove" });
+      collapsePost(post, `spammer (a post every ${avgHoursBetweenPosts.toFixed(1)}h)`);
       return true;
     } else {
-      const label = `<span class="spammer-label">| SPAMMER</span>`;
-      if (post.find(".ui-post-creator").length) {
-        post.find(".ui-post-creator").append(label);
-      } else {
-        post.find(".post-header__left").append(label);
-        post.find(".post-meta.mobile").append(label);
-      }
+      appendToPostMeta(post, `<span class="spammer-label">| SPAMMER</span>`);
     }
   }
   return false;
@@ -362,17 +413,11 @@ function handleSpammer(post, avgHoursBetweenPosts) {
 
 function getPostId(post) {
   try {
-    const headerLinks = post.find("header a");
-    if (!headerLinks || !headerLinks.length) return null;
+    const link = post.find(SELECTORS.postLink).first();
+    if (!link.length) return null;
 
-    const lastLink = headerLinks[headerLinks.length - 1];
-    if (!lastLink || !lastLink.href) return null;
-
-    const parts = lastLink.href.split("/");
-    if (!parts || parts.length === 0) return null;
-
-    const postId = parts[parts.length - 1];
-    return postId || null;
+    const match = link.attr("href").match(/\/gag\/([^\/?#]+)/);
+    return match ? match[1] : null;
   } catch (error) {
     console.error("Error getting post ID:", error);
     return null;
@@ -387,12 +432,12 @@ function findPostVotes(posts, postId) {
 function addVoteCounts(post, downvotes, upvotes) {
   if (downvotes === null || upvotes === null) return false;
 
-  if (settings.more_downvotes && downvotes >= upvotes) {
-    collapsePost(post, { mode: "hide" });
+  if (settings.more_downvotes && downvotes > upvotes) {
+    collapsePost(post, `${downvotes} downvotes vs ${upvotes} upvotes`);
     return true;
   }
 
-  const upvoteElement = post.find(".upvote").eq(1);
+  const upvoteElement = post.find(SELECTORS.upvoteCount).first();
   // The upvote count is hidden behind a "•" bullet when the site decides not to
   // show it. Use a trimmed comparison so minor whitespace differences don't
   // silently break the feature.
@@ -403,8 +448,8 @@ function addVoteCounts(post, downvotes, upvotes) {
   // Sanitize vote counts (should be numbers, but be safe)
   const safeDownvotes = parseInt(downvotes, 10) || 0;
   const downvoteSpan = `<span class="post-vote__text downvote upvote">${safeDownvotes}</span>`;
-  post.find(".post-vote").append(downvoteSpan);
-  post.find(".downvote.grouped").after(`<span class="post-vote__text downvote">${safeDownvotes}</span>`);
+  post.find(SELECTORS.legacyVoteContainer).append(downvoteSpan);
+  post.find(SELECTORS.downvoteButton).after(`<span class="post-vote__text downvote">${safeDownvotes}</span>`);
 
   return false;
 }
@@ -416,21 +461,20 @@ async function processPost(post) {
     return;
   }
 
+  // Streams far from the viewport are rendered as empty <article> shells and
+  // filled in later. Leave them untouched so the recheck picks them up once
+  // they have content, instead of marking them done while empty.
+  if (!post.find(SELECTORS.header).length) {
+    return;
+  }
+
   try {
     post.addClass("filtering");
     processedPosts.add(postElement);
 
     addVideoControls(post);
-    hideCheersBadges(post);
-    hideMemeButton(post);
 
     if (filterByEmojiTitle(post)) return;
-
-    const articleId = post.attr("id");
-    if (!articleId) {
-      post.addClass("filtered");
-      return;
-    }
 
     if (!shouldFilter()) {
       // Navigated away (e.g. into comments) before this post's turn came up.
@@ -438,7 +482,7 @@ async function processPost(post) {
       return;
     }
 
-    const username = await addUsername(post, articleId);
+    const username = await addUsername(post);
     if (!username) {
       post.addClass("filtered");
       return;
@@ -450,7 +494,7 @@ async function processPost(post) {
       return;
     }
 
-    if (settings.show_days || settings.min_days > 0 || settings.spammers || settings.more_downvotes || settings.always_display_upvotes) {
+    if (settings.show_days || parsePositiveNumber(settings.min_days) !== null || settings.spammers || settings.hide_spammers || settings.more_downvotes || settings.always_display_upvotes) {
       const userData = await fetchUserData(username);
       if (!userData || !userData.data) {
         post.addClass("filtered");
@@ -480,7 +524,7 @@ async function processPost(post) {
 
       addAccountAge(post, accountAge);
 
-      if (settings.spammers) {
+      if (settings.spammers || settings.hide_spammers) {
         const avgHours = calculateSpamScore(posts);
         if (avgHours !== null) {
           const wasRemoved = handleSpammer(post, avgHours);
@@ -507,10 +551,8 @@ async function filter(addedNode) {
   try {
     // Full-document catch-up for anything this call misses is handled by the
     // recheckInterval safety net, so we only need to look inside addedNode here.
-    const posts = $(addedNode)
-      .contents()
-      .find("article:not(.filtered):not(.filtering)")
-      .add($(addedNode).filter("article:not(.filtered):not(.filtering)"));
+    const unprocessed = "article:not(.filtered):not(.filtering)";
+    const posts = $(addedNode).find(unprocessed).add($(addedNode).filter(unprocessed));
 
     if (!posts.length) {
       return;
